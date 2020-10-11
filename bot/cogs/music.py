@@ -453,3 +453,6 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
         if isinstance(exc, QueueIsEmpty):
             await ctx.send("The queue is currently empty.")
 
+def setup(bot):	
+    bot.add_cog(Music(bot))
+    
