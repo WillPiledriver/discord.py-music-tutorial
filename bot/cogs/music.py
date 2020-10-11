@@ -147,6 +147,7 @@ class Player(wavelink.Player):
             raise NoVoiceChannel
 
         await super().connect(channel.id)
+        await super().set_volume(10)
         return channel
 
     async def teardown(self):
@@ -261,7 +262,7 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
                 "host": "127.0.0.1",
                 "port": 2333,
                 "rest_uri": "http://127.0.0.1:2333",
-                "password": "youshallnotpass",
+                "password": "falloutradio",
                 "identifier": "MAIN",
                 "region": "europe",
             }
@@ -289,6 +290,17 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
         elif isinstance(exc, NoVoiceChannel):
             await ctx.send("No suitable voice channel was provided.")
 
+    @commands.command(name="random")
+    async def shuffle_command(self, ctx):
+        player = self.get_player(ctx)
+        player.queue.shuffle()
+        await ctx.send("Queue shuffled.")
+
+    @shuffle_command.error
+    async def shuffle_command_error(self, ctx, exc):
+        if isinstance(exc, QueueIsEmpty):
+            await ctx.send("The queue could not be shuffled as it is currently empty.")
+
     @commands.command(name="disconnect", aliases=["leave"])
     async def disconnect_command(self, ctx):
         player = self.get_player(ctx)
@@ -308,7 +320,13 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
 
             await player.set_pause(False)
             await ctx.send("Playback resumed.")
-
+        if query.startswith("now"):
+            query = query[4:].strip("<>")
+            if not re.match(URL_REGEX, query):
+                query = f"ytsearch:{query}"
+            await player.add_tracks(ctx, await self.wavelink.get_tracks(query))
+            player.queue._queue.insert(player.queue.position + 1, player.queue._queue.pop(len(player.queue._queue) - 1))
+            await self.next_command(ctx)
         else:
             query = query.strip("<>")
             if not re.match(URL_REGEX, query):
@@ -337,6 +355,18 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
     async def pause_command_error(self, ctx, exc):
         if isinstance(exc, PlayerIsAlreadyPaused):
             await ctx.send("Already paused.")
+
+    @commands.command(name="vol")
+    async def vol(self, ctx, vol):
+        player = self.get_player(ctx)
+        vol = int(vol)
+        if vol < 0:
+            vol = 0
+        elif vol > 100:
+            vol = 100
+        await player.set_volume(int(vol))
+        await ctx.send(f"Volume changed to {vol}.")
+
 
     @commands.command(name="stop")
     async def stop_command(self, ctx):
@@ -379,17 +409,6 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
             await ctx.send("This could not be executed as the queue is currently empty.")
         elif isinstance(exc, NoPreviousTracks):
             await ctx.send("There are no previous tracks in the queue.")
-
-    @commands.command(name="shuffle")
-    async def shuffle_command(self, ctx):
-        player = self.get_player(ctx)
-        player.queue.shuffle()
-        await ctx.send("Queue shuffled.")
-
-    @shuffle_command.error
-    async def shuffle_command_error(self, ctx, exc):
-        if isinstance(exc, QueueIsEmpty):
-            await ctx.send("The queue could not be shuffled as it is currently empty.")
 
     @commands.command(name="repeat")
     async def repeat_command(self, ctx, mode: str):
@@ -434,6 +453,3 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
         if isinstance(exc, QueueIsEmpty):
             await ctx.send("The queue is currently empty.")
 
-
-def setup(bot):
-    bot.add_cog(Music(bot))
